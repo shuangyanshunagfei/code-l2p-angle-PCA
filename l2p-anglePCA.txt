@@ -1,0 +1,347 @@
+clear all
+clc
+warning('off');
+% addpath(genpath('C:\Users\DELL\Desktop\result\EUFS\datasets'));
+
+%% 载入数据
+Files = dir(fullfile('.\dataset', '*.mat'));
+Max_datanum = length(Files)   % 数据集的个数
+ 
+%% 生成对应路径文件夹并保存数据 
+file_path = '.\result\';
+
+for da = 1: Max_datanum
+    dataset_num = da;       
+    
+    Dname_path = Files(dataset_num).folder; % data folder
+    Dname = Files(dataset_num).name; % data name
+    
+    %% 创建保存数据的文件夹
+    folder_name = Dname(1:end-4);  % save folder name
+    file_path_name = strcat(file_path,folder_name);
+    if exist(file_path_name) == 0   %该文件夹不存在，则直接创建
+        mkdir(file_path_name);
+    else                                             %该文件夹存在，则先删除再创建
+        rmdir(file_path_name, 's'); %该文件夹中有没有文件均可删除
+        mkdir(file_path_name);
+    end
+    % 保存数据的文件夹
+    file_mat_path = [file_path_name '\'];
+
+    disp(['***********The test data name is: ***' num2str(dataset_num) '***'  Dname '****************'])
+    load([Dname_path, '\', Dname])
+    
+% %     归一化所有数据
+    test_X = (prestd(test_X'))';
+    train_X = (prestd(train_X'))';
+    
+    %求训练集（噪音数据）和测试集的大小
+    [test_n, test_dim] = size(test_X);
+    [train_n, train_dim] = size(train_X);
+
+    %将训练集和测试集合并在一起（每一行是一个样本点）
+    data = zeros(test_n+train_n, test_dim);
+    data(1:train_n,:) = train_X;
+    data(train_n+1:test_n+train_n,: ) = test_X;
+    
+    %归一化数据集
+%     data = mapminmax(data,0,1);
+    
+    %% ------------------这里默认数据是(n*dim),即每一行为一个样本-------------------- %%  
+    
+    result = zeros(20,20);j = 1;
+    sg = 1;
+    
+    for i = 50:10:150
+        result(1,j) = i;
+        rng(sg);
+        W = orth(rand(test_dim, i));
+        
+        
+        %% ---------------------------------------TRPCA-----------------------------------
+        result_TRPCA = zeros(11, 1);
+        for iter = 1:10
+            param.k = i;
+    %         param.t = 60;
+            param.nruns = 10;
+            param.eps = 1E-5;
+            param.maxiter = 1E5;
+            param.isdisplay = 0;
+            [Z,U,m] = trpca(data,param);
+            Z = test_X* U;
+            M = Z * U';
+            a = test_X - M;
+            ob = sum(sqrt(sum(a.*a,2)))/test_n;
+            result_TRPCA(iter) = ob;
+        end;
+        result_TRPCA(11) = mean(result_TRPCA(1:10))
+        result(2,j) = result_TRPCA(11);
+        file_name = [file_mat_path,'result_TRPCA' num2str(i) '.mat']
+        save (file_name, 'result_TRPCA','U');
+       
+        %% ---------------------------------------PCAL1-----------------------------------
+        result_PCAL1 = zeros(11, 1);
+        for iter = 1:10
+            W0 = W;
+           [W b obj1] = PCA_norm1_greed(data', i, W0);
+            Z = test_X* W;
+            M = Z * W';
+            a = test_X - M;
+            ob = sum(sqrt(sum(a.*a,2)))/test_n;
+            result_PCAL1(iter) = ob;
+        end;
+        result_PCAL1(11) = mean(result_PCAL1(1:10))
+        result(3,j) = result_PCAL1(11);
+        file_name = [file_mat_path,'result_PCAL1' num2str(i) '.mat']
+        save (file_name, 'result_PCAL1','W0','W');
+
+        %% ---------------------------------------PCA_norm1_nongreedy-----------------------------------
+        result_PCAnorm = zeros(11, 1);
+        for iter = 1:10
+            W0 = W;
+            [Z W obj b] = PCA_norm1_nongreedy(data', i, W0);
+            Z = test_X* W;
+            M = Z * W';
+            a = test_X - M;
+            ob = sum(sqrt(sum(a.*a,2)))/test_n;
+            result_PCAnorm(iter) = ob;
+        end;
+        result_PCAnorm(11) = mean(result_PCAnorm(1:10))
+        result(4,j) = result_PCAnorm(11);
+        file_name = [file_mat_path,'result_PCAnorm' num2str(i) '.mat']
+        save (file_name, 'result_PCAnorm','W0','W');
+
+        %% ---------------------------------------PCA-----------------------------------
+        result_PCA= zeros(11, 1);
+        for iter = 1:10
+            [V,E,mv]=PCA(data);
+            W = V(:,1:i);
+            Z = test_X* W;
+            M = Z * W';
+            a = test_X - M;
+            ob = sum(sqrt(sum(a.*a,2)))/test_n;
+            result_PCA(iter) = ob;
+        end;
+        result_PCA(11) = mean(result_PCA(1:10))
+        result(5,j) = result_PCA(11);
+        file_name = [file_mat_path,'result_PCA' num2str(i) '.mat']
+        save (file_name, 'result_PCA','W');
+
+        %% ---------------------------------------PCAR1-----------------------------------
+        result_PCAR1 = zeros(11, 1);
+        for iter = 1:10
+            U0 = W;
+           [U b V] = r1pca1(data', i, U0);
+            Z = test_X* U;
+            M = Z * U';
+            a = test_X - M;
+            size(sum(a.*a,2))
+            ob = sum(sqrt(sum(a.*a,2)))/test_n;
+            result_PCAR1(iter) = ob;
+        end;
+        result_PCAR1(11) = mean(result_PCAR1(1:10))
+        result(6,j) = mean(result_PCAR1(1:10));
+        file_name = [file_mat_path,'result_PCAR1' num2str(i) '.mat']
+        save (file_name, 'result_PCAR1','U0','U');
+       
+       %% ---------------------------------------RPCAb2p1------------------------------------
+        result_RPCAb2p1 = zeros(11, 1);
+        p = 1;
+        for iter = 1:10
+            W0 = W;
+            [W, obj, d] = RPCAb2p(data', i, p, W0);
+            Z = test_X* W;
+            M = Z * W';
+            a = test_X - M;
+            ob = sum(sqrt(sum(a.*a,2)))/test_n;
+            result_RPCAb2p1(iter) = ob;
+        end;
+        result_RPCAb2p1(11) = mean(result_RPCAb2p1(1:10))
+        result(7,j) = result_RPCAb2p1(11);
+        file_name = [file_mat_path,'result_RPCAb2p1' num2str(i) '.mat']
+        save (file_name, 'result_RPCAb2p1','W0','W');
+           
+       %% ---------------------------------------RPCAb2p05------------------------------------
+        result_RPCAb2p05 = zeros(11, 1);
+        p = 0.5;
+        for iter = 1:10
+            W0 = W;
+            [W, obj, d] = RPCAb2p(data', i, p, W0);
+            Z = test_X* W;
+            M = Z * W';
+            a = test_X - M;
+            ob = sum(sqrt(sum(a.*a,2)))/test_n;
+            result_RPCAb2p05(iter) = ob;
+        end;
+        result_RPCAb2p05(11) = mean(result_RPCAb2p05(1:10))
+        result(8,j) = result_RPCAb2p05(11);
+        file_name = [file_mat_path,'result_RPCAb2p05' num2str(i) '.mat']
+        save (file_name, 'result_RPCAb2p05','W0','W');
+    
+%        %% ---------------------------------------RPCA_topk_revise(no_mean)-----------------------------------
+%         result_RPCA_topk = zeros(11, 1);
+%         h = test_n;
+%         for iter = 1:10
+%             W0 = W;
+%             [W, b, obj] = RPCA_topk_revise(data', i, h, W0);
+%             Z = test_X* W;
+%             M = Z * W';
+%             a = test_X - M;
+%             ob = sum(sqrt(sum(a.*a,2)))/test_n;
+%             result_RPCA_topk(iter) = ob;
+%         end;
+%         result_RPCA_topk(11) = mean(result_RPCA_topk(1:10))
+%         result(9,j) =  result_RPCA_topk(11);
+%         file_name = [file_mat_path,'result_RPCA_topk' num2str(i) '.mat']
+%         save (file_name, 'result_RPCA_topk','W0','W');  
+
+       %% ---------------------------------------RPCA_topk_revise(mean)-----------------------------------
+        result_RPCA_topk_m = zeros(11, 1);
+        h = test_n;
+        for iter = 1:10
+            W0 = W;
+            [W, b, obj] = RPCA_topk_revise(data', i, h, W0);
+            A = test_X' - b*ones(1,test_n);
+            Z = A'* W;
+            M = Z * W'; 
+            M = M' + b*ones(1,test_n);
+            M = M';
+            a = test_X - M;
+            ob = sum(sqrt(sum(a.*a,2)))/test_n;
+            result_RPCA_topk_m(iter) = ob;
+        end;
+        result_RPCA_topk_m(11) = mean(result_RPCA_topk_m(1:10))
+        result(10,j) =  result_RPCA_topk_m(11);
+        file_name = [file_mat_path,'result_RPCA_topk_m' num2str(i) '.mat']
+        save (file_name, 'result_RPCA_topk_m','W0','W'); 
+
+       %% ---------------------------------------RPCA_OM-----------------------------------
+        result_RPCA_OM = zeros(11, 1);
+        for iter = 1:10
+            [W, b, obj] = RPCA_OM(data', i, 20);
+            A = test_X' - b*ones(1,test_n);
+            Z = A'* W;
+            M = Z * W'; 
+            M = M' + b*ones(1,test_n);
+            M = M';        
+            a = test_X - M;
+            ob = sum(sqrt(sum(a.*a,2)))/test_n;
+            result_RPCA_OM(iter) = ob;
+        end;
+        result_RPCA_OM(11) = mean(result_RPCA_OM(1:10))
+        result(11,j) =  result_RPCA_OM(11);
+        file_name = [file_mat_path,'result_RPCA_OM' num2str(i) '.mat']
+        save (file_name, 'result_RPCA_OM','W0','W');
+        
+       
+
+%        %% ---------------------------------------Angle_PCA-----------------------------------
+%         result_Angle_PCA = zeros(11, 1);
+%         for iter = 1:10
+%             [W] = Angle_PCA(data', i);
+%             Z = test_X* W;
+%             M = Z * W';
+%             a = test_X - M;
+%             ob = sum(sqrt(sum(a.*a,2)))/test_n;
+%             result_Angle_PCA(iter) = ob;
+%         end;
+%         result_Angle_PCA(11) = mean(result_Angle_PCA(1:10))
+%         result(12,j) =  result_Angle_PCA(11);
+%         file_name = [file_mat_path,'result_Angle_PCA' num2str(i) '.mat']
+%         save (file_name, 'result_Angle_PCA','W');
+        
+%        %% ---------------------------------------CRPCA_OM(is`bias=1)-----------------------------------
+%         result_CRPCA_OM = zeros(10, 1);
+%         isbias = 1;
+%         mu = 0.8;
+%         rho = 1.5;
+%         NITER = 20;
+%         r = 2;
+%         for iter = 1:10
+%             [Z,b,obj,eigv,Lambda_max] = CRPCA_OM(data', r, isbias, mu, rho, NITER);
+%             Z = Z';
+%             M = Z(train_n+1:test_n+train_n,:);     
+%             a = test_X - M;
+%             ob = sum(sqrt(sum(a.*a,2)))/test_n;
+%             result_CRPCA_OM(iter) = ob;
+%         end;
+%         result_CRPCA_OM(11) = mean(result_CRPCA_OM(1:10))
+%         result(13,j) =  result_CRPCA_OM(11);
+%         file_name = [file_mat_path,'result_CRPCA_OM' num2str(i) '.mat']
+%         save (file_name, 'result_CRPCA_OM','Z');        
+%         
+%        %% ---------------------------------------CRPCA_OM(isbias=0)-----------------------------------
+%         result_CRPCA = zeros(10, 1);
+%         isbias = 0;
+%         mu = 0.8;
+%         rho = 1.5;
+%         NITER = 20;
+%         r = 2;
+%         for iter = 1:10
+%             [Z,b,obj,eigv,Lambda_max] = CRPCA_OM(data', r, isbias, mu, rho, NITER);
+%             Z = Z';
+%             M = Z(train_n+1:test_n+train_n,:);     
+%             a = test_X - M;
+%             ob = sum(sqrt(sum(a.*a,2)))/test_n;
+%             result_CRPCA(iter) = ob;
+%         end;
+%         result_CRPCA(11) = mean(result_CRPCA(1:10))
+%         result(14,j) =  result_CRPCA(11);
+%         file_name = [file_mat_path,'result_CRPCA' num2str(i) '.mat']
+%         save (file_name, 'result_CRPCA','Z'); 
+
+%% ---------------------------------------L2p_re_and_var_PCA(p=1)-----------------------------------
+        result_L21_re_and_var_PCA = zeros(11, 1);
+        p = 1
+        for iter = 1:10
+            W0 = W;
+            [W] = L2p_re_and_var_PCA(data', i, p, W0);
+            Z = test_X* W;
+            M = Z * W';
+            a = test_X - M;
+            ob = sum(sqrt(sum(a.*a,2)))/test_n;
+            result_L21_re_and_var_PCA(iter) = ob;
+        end;
+        result_L21_re_and_var_PCA(11) = mean(result_L21_re_and_var_PCA(1:10))
+        result(15,j) =  result_L21_re_and_var_PCA(11);
+        file_name = [file_mat_path,'result_L21_re_and_var_PCA' num2str(i) '.mat']
+        save (file_name, 'result_L21_re_and_var_PCA','W0','W');
+        
+        %% ---------------------------------------L2p_re_and_var_PCA(p=2)-----------------------------------
+        result_L22_re_and_var_PCA = zeros(11, 1);
+        p = 2
+        for iter = 1:10
+            W0 = W;
+            [W] = L2p_re_and_var_PCA(data', i, p, W0);
+            Z = test_X* W;
+            M = Z * W';
+            a = test_X - M;
+            ob = sum(sqrt(sum(a.*a,2)))/test_n;
+            result_L22_re_and_var_PCA(iter) = ob;
+        end;
+        result_L22_re_and_var_PCA(11) = mean(result_L22_re_and_var_PCA(1:10))
+        result(16,j) =  result_L22_re_and_var_PCA(11);
+        file_name = [file_mat_path,'result_L22_re_and_var_PCA' num2str(i) '.mat']
+        save (file_name, 'result_L22_re_and_var_PCA', 'W0', 'W');
+    
+    file_name = [folder_name, '.mat']
+    save ([file_mat_path,file_name], 'result');
+    file_name = [folder_name, '.xlsx']
+    xlswrite([file_mat_path,file_name],result);  
+    
+%     %% 在代码中写入如下3句话，程序跑完就可以收到邮件啦
+%     subject = 'L2P';
+%     str = ['重构误差实验：',folder_name, '，第', num2str(i), '个维度：' ]
+%     content = [str, '-----已经跑完了！'];
+%     Email(subject,content); %调用函数发邮件
+  
+    j = j + 1;
+    end
+    
+%% 在代码中写入如下3句话，程序跑完就可以收到邮件啦
+% subject = 'L2P';
+% str = ['重构误差实验：',folder_name, '，（共', num2str(Max_datanum), '个数据集），第', num2str(da), '个数据集：' ]
+% content = [str, '-----已经跑完了，你可以到实验室看看了！'];
+% Email(subject,content); %调用函数发邮件
+    
+end
